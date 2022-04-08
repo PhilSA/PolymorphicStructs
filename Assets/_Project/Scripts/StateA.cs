@@ -7,17 +7,28 @@ using Unity.Mathematics;
 public partial struct StateA : IMyState
 {
     public float Duration;
-    public float MovementAmplitude;
+    public float3 MovementSpeed;
 
-    public void OnStateEnter()
+    private float _durationCounter;
+
+    public void OnStateEnter(ref StateUpdateData_ReadWrite refData, in StateUpdateData_ReadOnly inData)
     {
+        _durationCounter = Duration;
     }
 
-    public void OnStateExit()
+    public void OnStateExit(ref StateUpdateData_ReadWrite refData, in StateUpdateData_ReadOnly inData)
     {
+        refData.Translation = refData.StateMachine.StartTranslation;
     }
 
-    public void OnStateUpdate(ref StateUpdateData_ReadWrite refData, in StateUpdateData_Read inData)
+    public void OnStateUpdate(ref StateUpdateData_ReadWrite refData, in StateUpdateData_ReadOnly inData)
     {
+        refData.Translation += MovementSpeed * inData.DeltaTime;
+
+        _durationCounter -= inData.DeltaTime;
+        if (_durationCounter <= 0f)
+        {
+            refData.StateMachine.CurrentStateIndex = refData.StateMachine.StateBIndex;
+        }
     }
 }

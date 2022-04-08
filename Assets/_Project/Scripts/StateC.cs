@@ -7,17 +7,28 @@ using Unity.Mathematics;
 public partial struct StateC : IMyState
 {
     public float Duration;
-    public float ScaleAmplitude;
+    public float ScaleSpeed;
 
-    public void OnStateEnter()
+    private float _durationCounter;
+
+    public void OnStateEnter(ref StateUpdateData_ReadWrite refData, in StateUpdateData_ReadOnly inData)
     {
+        _durationCounter = Duration;
     }
 
-    public void OnStateExit()
+    public void OnStateExit(ref StateUpdateData_ReadWrite refData, in StateUpdateData_ReadOnly inData)
     {
+        refData.Scale = 1f;
     }
 
-    public void OnStateUpdate(ref StateUpdateData_ReadWrite refData, in StateUpdateData_Read inData)
+    public void OnStateUpdate(ref StateUpdateData_ReadWrite refData, in StateUpdateData_ReadOnly inData)
     {
+        refData.Scale += ScaleSpeed * inData.DeltaTime;
+
+        _durationCounter -= inData.DeltaTime;
+        if(_durationCounter <= 0f)
+        {
+            refData.StateMachine.CurrentStateIndex = refData.StateMachine.StateAIndex;
+        }
     }
 }

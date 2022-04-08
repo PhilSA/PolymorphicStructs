@@ -7,6 +7,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.CSharp;
+using System.Diagnostics;
 
 namespace PolymorphicStructsSourceGenerators
 {
@@ -39,171 +40,189 @@ namespace PolymorphicStructsSourceGenerators
 
         public void Execute(GeneratorExecutionContext context)
         {
-            // Find all polymorphic struct interfaces, based on attribute
-            IEnumerable<InterfaceDeclarationSyntax> polymorphicInterfaces = FindAllInterfacesWithAttribute(context, "PolymorphicStruct");
+            //Debugger.Launch();
+            System.Console.WriteLine("PolymorphicStructs sourceGenerator execute  on assembly " + context.Compilation.AssemblyName);
 
-            // For each polymorphic struct interface, generate a polymorphic struct
-            foreach (InterfaceDeclarationSyntax polymorphicInterface in polymorphicInterfaces)
+            try
             {
-                // Get interface namespace
-                string interfaceNamespace = GetNamespace(polymorphicInterface);
+                PolymorphicStructSyntaxReceiver systemReceiver = (PolymorphicStructSyntaxReceiver)context.SyntaxReceiver;
 
-                // Build a list of all usings
-                List<string> allUsings = new List<string>();
+                // Find all polymorphic struct interfaces, based on attribute
+                IEnumerable<InterfaceDeclarationSyntax> polymorphicInterfaces = systemReceiver.PolymorphicInterfaces;
+
+                // For each polymorphic struct interface, generate a polymorphic struct
+                foreach (InterfaceDeclarationSyntax polymorphicInterface in polymorphicInterfaces)
                 {
-                    TryAddUniqueUsing(allUsings, "System");
+                    string mergedStructName = polymorphicInterface.Identifier.Text.Substring(1); // TODO; must find better
+
+                    // Get interface namespace
+                    string interfaceNamespace = SourceGenUtils.GetNamespace(polymorphicInterface);
+
+                    // Build a list of all usings
+                    List<string> allUsings = new List<string>();
+                    {
+                        TryAddUniqueUsing(allUsings, "System");
+                        if (!string.IsNullOrEmpty(interfaceNamespace))
+                        {
+                            TryAddUniqueUsing(allUsings, interfaceNamespace);
+                        }
+                        foreach (var u in polymorphicInterface.SyntaxTree.GetCompilationUnitRoot(context.CancellationToken).Usings)
+                        {
+                            TryAddUniqueUsing(allUsings, u.Name.ToString());
+                        }
+                    }
+
+                    // Build list of interface methods
+                    IEnumerable<MethodDeclarationSyntax> methods = SourceGenUtils.GetAllMethodsOfInterface(polymorphicInterface);
+
+                    // Build list of all structs implementing this interface, as well as the fields for each of them
+                    List<IndividialStructData> structDatas = BuildIndividualStructsData(context, systemReceiver, allUsings, polymorphicInterface);
+
+                    if (structDatas.Count == 0)
+                        continue;
+
+                    // Build list of merged fields across all structs
+                    List<MergedFieldData> mergedFields = BuildMergedFields(structDatas);
+
+                    FileWriter mergedStructWriter = new FileWriter();
+
+                    // Generate usings
+                    {
+                        foreach (string u in allUsings)
+                        {
+                            mergedStructWriter.WriteLine("using " + u + ";");
+                        }
+                    }
+
+                    mergedStructWriter.WriteLine("");
+
+                    // Open namespace
                     if (!string.IsNullOrEmpty(interfaceNamespace))
                     {
-                        TryAddUniqueUsing(allUsings, interfaceNamespace);
+                        mergedStructWriter.WriteLine("namespace " + interfaceNamespace);
+                        mergedStructWriter.BeginScope();
                     }
-                    foreach (var u in polymorphicInterface.SyntaxTree.GetCompilationUnitRoot().Usings)
+
                     {
-                        TryAddUniqueUsing(allUsings, u.Name.ToString());
-                    }
-                }
-
-                // Build list of interface methods
-                IEnumerable<MethodDeclarationSyntax> methods = GetAllMethodsOfInterface(polymorphicInterface);
-
-                // Build list of all structs implementing this interface, as well as the fields for each of them
-                List<IndividialStructData> structDatas = BuildIndividualStructsData(context, allUsings, polymorphicInterface);
-
-                if (structDatas.Count == 0)
-                    continue;
-
-                // Build list of merged fields across all structs
-                List<MergedFieldData> mergedFields = BuildMergedFields(structDatas);
-
-                FileWriter mergedStructWriter = new FileWriter();
-                string mergedStructName = polymorphicInterface.Identifier.ToString().Substring(1); // TODO; must find better
-
-                // Generate usings
-                {
-                    foreach (string u in allUsings)
-                    {
-                        mergedStructWriter.WriteLine("using " + u + ";");
-                    }
-                }
-
-                mergedStructWriter.WriteLine("");
-
-                // Open namespace
-                if (!string.IsNullOrEmpty(interfaceNamespace))
-                {
-                    mergedStructWriter.WriteLine("namespace " + interfaceNamespace);
-                    mergedStructWriter.BeginScope();
-                }
-
-                {
-                    // Generate struct declaration
-                    mergedStructWriter.WriteLine("[Serializable]");
-                    mergedStructWriter.WriteLine("public partial struct " + mergedStructName); // TODO: how to define custom interfaces it can implement
-                    mergedStructWriter.BeginScope();
-                    {
-                        // Generate types enum
+                        // Generate struct declaration
+                        mergedStructWriter.WriteLine("[Serializable]");
+                        mergedStructWriter.WriteLine("public partial struct " + mergedStructName); // TODO: how to define custom interfaces it can implement
+                        mergedStructWriter.BeginScope();
                         {
-                            mergedStructWriter.WriteLine("public enum " + typeEnumName);
-                            mergedStructWriter.BeginScope();
+                            // Generate types enum
                             {
-                                foreach (IndividialStructData structData in structDatas)
-                                {
-                                    mergedStructWriter.WriteLine(structData.StructName + ",");
-                                }
-                            }
-                            mergedStructWriter.EndScope();
-                        }
-
-                        mergedStructWriter.WriteLine("");
-
-                        // Generate fields
-                        {
-                            mergedStructWriter.WriteLine("public " + typeEnumName + " " + typeEnumVarName + ";");
-
-                            for (int i = 0; i < mergedFields.Count; i++)
-                            {
-                                MergedFieldData mergedField = mergedFields[i];
-                                mergedStructWriter.WriteLine("public " + mergedField.TypeName + " " + mergedField.FieldName + ";");
-                            }
-                        }
-
-                        mergedStructWriter.WriteLine("");
-
-                        // Generate polymorphic methods
-                        {
-                            foreach (MethodDeclarationSyntax method in methods)
-                            {
-                                // Generate parameters
-                                string parametersString = "";
-                                string parametersStringWithoutType = "";
-                                for (int i = 0; i < method.ParameterList.Parameters.Count; i++)
-                                {
-                                    ParameterSyntax param = method.ParameterList.Parameters[i];
-
-                                    if(param.Modifiers.Count > 0)
-                                    {
-                                        parametersString += param.Modifiers.ToString() + " ";
-                                        parametersStringWithoutType += param.Modifiers.ToString() + " ";
-                                    }
-
-                                    parametersString += param.Type.ToString() + " " + param.Identifier.ToString();
-                                    parametersStringWithoutType += param.Identifier.ToString();
-
-                                    if (i < method.ParameterList.Parameters.Count - 1)
-                                    {
-                                        parametersString += ", ";
-                                        parametersStringWithoutType += ", ";
-                                    }
-                                }
-
-                                // Method
-                                mergedStructWriter.WriteLine("public " + method.ReturnType.ToString() + " " + method.Identifier.ToString() + "(" + parametersString + ")");
+                                mergedStructWriter.WriteLine("public enum " + typeEnumName);
                                 mergedStructWriter.BeginScope();
                                 {
-                                    // For each individual struct, call the method
-                                    mergedStructWriter.WriteLine("switch(" + typeEnumVarName + ")");
-                                    mergedStructWriter.BeginScope();
+                                    foreach (IndividialStructData structData in structDatas)
                                     {
-                                        foreach (IndividialStructData structData in structDatas)
-                                        {
-                                            mergedStructWriter.WriteLine("case " + typeEnumName + "." + structData.StructName + ":");
-                                            mergedStructWriter.BeginScope();
-                                            {
-                                                string structVarName = "instance_" + structData.StructName;
-
-                                                mergedStructWriter.WriteLine(structData.StructName + " " + structVarName + " = new " + structData.StructName + "(this);");
-                                                mergedStructWriter.WriteLine(structVarName + "." + method.Identifier.ToString() + "(" + parametersStringWithoutType + ");");
-                                                mergedStructWriter.WriteLine(structVarName + ".To" + mergedStructName + "(ref this);");
-                                                mergedStructWriter.WriteLine("break;");
-                                            }
-                                            mergedStructWriter.EndScope();
-                                        }
+                                        mergedStructWriter.WriteLine(structData.StructName + ",");
                                     }
-                                    mergedStructWriter.EndScope();
                                 }
                                 mergedStructWriter.EndScope();
                             }
+
+                            mergedStructWriter.WriteLine("");
+
+                            // Generate fields
+                            {
+                                mergedStructWriter.WriteLine("public " + typeEnumName + " " + typeEnumVarName + ";");
+
+                                for (int i = 0; i < mergedFields.Count; i++)
+                                {
+                                    MergedFieldData mergedField = mergedFields[i];
+                                    mergedStructWriter.WriteLine("public " + mergedField.TypeName + " " + mergedField.FieldName + ";");
+                                }
+                            }
+
+                            mergedStructWriter.WriteLine("");
+
+                            // Generate polymorphic methods
+                            {
+                                foreach (MethodDeclarationSyntax method in methods)
+                                {
+                                    // Generate parameters
+                                    string parametersString = "";
+                                    string parametersStringWithoutType = "";
+                                    for (int i = 0; i < method.ParameterList.Parameters.Count; i++)
+                                    {
+                                        ParameterSyntax param = method.ParameterList.Parameters[i];
+
+                                        if (param.Modifiers != null && param.Modifiers.Count > 0)
+                                        {
+                                            parametersString += param.Modifiers.ToString() + " ";
+                                            parametersStringWithoutType += param.Modifiers.ToString() + " ";
+                                        }
+
+                                        parametersString += param.Type.ToString() + " " + param.Identifier.Text;
+                                        parametersStringWithoutType += param.Identifier.Text;
+
+                                        if (i < method.ParameterList.Parameters.Count - 1)
+                                        {
+                                            parametersString += ", ";
+                                            parametersStringWithoutType += ", ";
+                                        }
+                                    }
+
+                                    // Method
+                                    mergedStructWriter.WriteLine("public " + method.ReturnType.ToString() + " " + method.Identifier.ToString() + "(" + parametersString + ")");
+                                    mergedStructWriter.BeginScope();
+                                    {
+                                        // For each individual struct, call the method
+                                        mergedStructWriter.WriteLine("switch(" + typeEnumVarName + ")");
+                                        mergedStructWriter.BeginScope();
+                                        {
+                                            foreach (IndividialStructData structData in structDatas)
+                                            {
+                                                mergedStructWriter.WriteLine("case " + typeEnumName + "." + structData.StructName + ":");
+                                                mergedStructWriter.BeginScope();
+                                                {
+                                                    string structVarName = "instance_" + structData.StructName;
+
+                                                    mergedStructWriter.WriteLine(structData.StructName + " " + structVarName + " = new " + structData.StructName + "(this);");
+                                                    mergedStructWriter.WriteLine(structVarName + "." + method.Identifier.ToString() + "(" + parametersStringWithoutType + ");");
+                                                    mergedStructWriter.WriteLine(structVarName + ".To" + mergedStructName + "(ref this);");
+                                                    mergedStructWriter.WriteLine("break;");
+                                                }
+                                                mergedStructWriter.EndScope();
+                                            }
+                                        }
+                                        mergedStructWriter.EndScope();
+                                    }
+                                    mergedStructWriter.EndScope();
+                                }
+                            }
                         }
+                        mergedStructWriter.EndScope();
                     }
-                    mergedStructWriter.EndScope();
-                }
 
-                // Close namespace
-                if (!string.IsNullOrEmpty(interfaceNamespace))
-                {
-                    mergedStructWriter.EndScope();
-                }
+                    // Close namespace
+                    if (!string.IsNullOrEmpty(interfaceNamespace))
+                    {
+                        mergedStructWriter.EndScope();
+                    }
 
-                context.AddSource(mergedStructName, SourceText.From(mergedStructWriter.FileContents, Encoding.UTF8));
+                    System.Console.WriteLine("Generating PolyInterface " + mergedStructName);
 
-                // For each individual struct, generate From/To converter methods
-                foreach (IndividialStructData structData in structDatas)
-                {
-                    GeneratePartialIndividualStruct(context, allUsings, mergedStructName, structData, mergedFields);
+                    context.AddSource(mergedStructName, SourceText.From(mergedStructWriter.FileContents, Encoding.UTF8));
+
+                    // For each individual struct, generate From/To converter methods
+                    foreach (IndividialStructData structData in structDatas)
+                    {
+                        GeneratePartialIndividualStruct(context, allUsings, mergedStructName, structData, mergedFields);
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                System.Console.WriteLine("SourceGenerators ERROR: " + ex.Message);
             }
         }
 
-        public void Initialize(GeneratorInitializationContext context) { }
+        public void Initialize(GeneratorInitializationContext context)
+        {
+            context.RegisterForSyntaxNotifications(() => new PolymorphicStructSyntaxReceiver());
+        }
 
         private static List<MergedFieldData> BuildMergedFields(List<IndividialStructData> structDatas)
         {
@@ -260,43 +279,45 @@ namespace PolymorphicStructsSourceGenerators
             return mergedFields;
         }
 
-        private static List<IndividialStructData> BuildIndividualStructsData(GeneratorExecutionContext context, List<string> allUsings, InterfaceDeclarationSyntax polymorphicInterface)
+        private static List<IndividialStructData> BuildIndividualStructsData(GeneratorExecutionContext context, PolymorphicStructSyntaxReceiver systemReceiver, List<string> allUsings, InterfaceDeclarationSyntax polymorphicInterface)
         {
             List<IndividialStructData> structDatas = new List<IndividialStructData>();
 
-            IEnumerable<StructDeclarationSyntax> individualStructs = FindAllStructsImplementingInterface(context, polymorphicInterface.Identifier.ToString());
-            foreach (StructDeclarationSyntax individualStruct in individualStructs)
+            foreach (StructDeclarationSyntax individualStruct in systemReceiver.AllStructs)
             {
-                IndividialStructData structData = new IndividialStructData();
-                structData.Namespace = GetNamespace(individualStruct);
-                structData.StructName = individualStruct.Identifier.ToString();
-
-                // Add usings
-                foreach (var u in individualStruct.SyntaxTree.GetCompilationUnitRoot().Usings)
+                if(SourceGenUtils.ImplementsInterface(individualStruct, polymorphicInterface.Identifier.Text))
                 {
-                    TryAddUniqueUsing(allUsings, u.Name.ToString());
-                }
+                    IndividialStructData structData = new IndividialStructData();
+                    structData.Namespace = SourceGenUtils.GetNamespace(individualStruct);
+                    structData.StructName = individualStruct.Identifier.ToString();
 
-                // Add fields
-                IEnumerable<FieldDeclarationSyntax> fields = GetAllFieldsOfStruct(individualStruct);
-                foreach (FieldDeclarationSyntax field in fields)
-                {
-                    structData.Fields.Add(new StructFieldData
+                    // Add usings
+                    foreach (var u in individualStruct.SyntaxTree.GetCompilationUnitRoot(context.CancellationToken).Usings)
                     {
-                        TypeName = field.Declaration.Type.ToString(),
-                        FieldName = field.Declaration.Variables.ToString(),
-                    });
-                }
+                        TryAddUniqueUsing(allUsings, u.Name.ToString());
+                    }
 
-                structDatas.Add(structData);
-            }
+                    // Add fields
+                    IEnumerable<FieldDeclarationSyntax> fields = SourceGenUtils.GetAllFieldsOfStruct(individualStruct);
+                    foreach (FieldDeclarationSyntax field in fields)
+                    {
+                        structData.Fields.Add(new StructFieldData
+                        {
+                            TypeName = field.Declaration.Type.ToString(),
+                            FieldName = field.Declaration.Variables.ToString(),
+                        });
+                    }
+
+                    structDatas.Add(structData);
+                }
+            }    
 
             return structDatas;
         }
 
         private static void TryAddUniqueUsing(List<string> allUsings, string newUsing)
         {
-            if(!allUsings.Contains(newUsing))
+            if (!allUsings.Contains(newUsing))
             {
                 allUsings.Add(newUsing);
             }
@@ -306,7 +327,7 @@ namespace PolymorphicStructsSourceGenerators
             GeneratorExecutionContext context,
             List<string> allUsings,
             string mergedStructName,
-            IndividialStructData structData, 
+            IndividialStructData structData,
             List<MergedFieldData> mergedFields)
         {
             FileWriter individualStructWriter = new FileWriter();
@@ -398,65 +419,9 @@ namespace PolymorphicStructsSourceGenerators
                 individualStructWriter.EndScope();
             }
 
+            System.Console.WriteLine("Generating IndividualStruct " + structData.StructName);
+
             context.AddSource(structData.StructName, SourceText.From(individualStructWriter.FileContents, Encoding.UTF8));
-        }
-
-        private static IEnumerable<InterfaceDeclarationSyntax> FindAllInterfacesWithAttribute(GeneratorExecutionContext context, string attributeName)
-        {
-            IEnumerable <InterfaceDeclarationSyntax> interfacesWithAttribute = context.Compilation.SyntaxTrees
-                .SelectMany(st => st.GetRoot()
-                        .DescendantNodes()
-                        .Where(n => n is InterfaceDeclarationSyntax)
-                        .Select(n => n as InterfaceDeclarationSyntax)
-                        .Where(r => r.AttributeLists.SelectMany(al => al.Attributes).Any(a => a.Name.GetText().ToString() == attributeName)));
-
-            return interfacesWithAttribute;
-        }
-
-        private static IEnumerable<StructDeclarationSyntax> FindAllStructsImplementingInterface(GeneratorExecutionContext context, string interfaceName)
-        {
-            IEnumerable<StructDeclarationSyntax> structsWithInterface = context.Compilation.SyntaxTrees
-                .SelectMany(st => st.GetRoot()
-                        .DescendantNodes()
-                        .Where(n => n is StructDeclarationSyntax)
-                        .Select(n => n as StructDeclarationSyntax)
-                        .Where(r => r.BaseList.Types.Any(t => t.ToString() == interfaceName)));
-
-            return structsWithInterface;
-        }
-
-        private static IEnumerable<MethodDeclarationSyntax> GetAllMethodsOfInterface(InterfaceDeclarationSyntax interfaceDeclaration)
-        {
-            IEnumerable<MethodDeclarationSyntax> methods = interfaceDeclaration.Members
-                .Where(m => m.IsKind(SyntaxKind.MethodDeclaration)).OfType<MethodDeclarationSyntax>();
-
-            return methods;
-        }
-
-        private static IEnumerable<FieldDeclarationSyntax> GetAllFieldsOfStruct(StructDeclarationSyntax structDeclaration)
-        {
-            IEnumerable<FieldDeclarationSyntax> fields = structDeclaration.Members
-                .Where(m => m.IsKind(SyntaxKind.FieldDeclaration)).OfType<FieldDeclarationSyntax>();
-
-            return fields;
-        }
-
-        private static string GetNamespace(BaseTypeDeclarationSyntax syntax)
-        {
-            string nameSpace = string.Empty;
-            SyntaxNode potentialNamespaceParent = syntax.Parent;
-
-            while (potentialNamespaceParent != null && !(potentialNamespaceParent is NamespaceDeclarationSyntax))
-            {
-                potentialNamespaceParent = potentialNamespaceParent.Parent;
-            }
-
-            if (potentialNamespaceParent != null && potentialNamespaceParent is NamespaceDeclarationSyntax namespaceParent)
-            {
-                nameSpace = namespaceParent.Name.ToString();
-            }
-
-            return nameSpace;
         }
     }
 }
