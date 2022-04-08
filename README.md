@@ -97,5 +97,5 @@ StateA stateA = new StateA(state);
 1. `TestScene` is the sample scene
 2. `CubeSpawnerSystem` initializes the scene by spawning thousands of cube prefabs (`Cube`)
 3. The `Cube` prefab has a `StateMachineAuthoring` component
-4. The `StateMachineAuthoring` component adds a `MyStateMachine` as well as a `DynamicBuffer<StateElement>`, where `StateElement` contains a `MyState`. This buffer is the place where we store all of our polymorphic states. You can see how we create a polymorphic `MyState` from individual state structs: `statesBuffer.Add(new StateElement { Value = StateA.ToMyState() });`
+4. The `StateMachineAuthoring` component adds a `MyStateMachine` as well as a `DynamicBuffer<MyState>`. This buffer is the place where we store all of our polymorphic states. You can see how we create a polymorphic `MyState` from individual state structs in this authoring component: `statesBuffer.Add(StateA.ToMyState());`
 5. `MyStateMachineSystem` iterates over all state machine entities, and for each one, handles calling `OnStateUpdate()` on whichever state is at `StateMachine.CurrentStateIndex` in the states buffer. It also handles transitions
