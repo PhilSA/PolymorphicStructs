@@ -4,7 +4,7 @@
 1. Import the PolymorphicStructs.unitypackage into your project
 2. Make sure all of the code that's going to use PolymorphicStructs is under an .asmdef and references the PolymorphicStructs.asmdef
 
-## Usage example
+## How to use
 1. Create an interface that will represent the various functions your polymorphic structs will share. This interface must have the `[PolymorphicStruct]`  attribute on it
 ```cs
 [PolymorphicStruct]
@@ -92,3 +92,10 @@ MyState state = stateA.ToMyState();
 // Creating a StateA from a MyState
 StateA stateA = new StateA(state);
 ```
+
+## How the sample works
+1. `TestScene` is the sample scene
+2. `CubeSpawnerSystem` initializes the scene by spawning thousands of cube prefabs (`Cube`)
+3. The `Cube` prefab has a `StateMachineAuthoring` component
+4. The `StateMachineAuthoring` component adds a `MyStateMachine` as well as a `DynamicBuffer<StateElement>`, where `StateElement` contains a `MyState`. This buffer is the place where we store all of our polymorphic states. You can see how we create a polymorphic `MyState` from individual state structs: `statesBuffer.Add(new StateElement { Value = StateA.ToMyState() });`
+5. `MyStateMachineSystem` iterates over all state machine entities, and for each one, handles calling `OnStateUpdate()` on whichever state is at `StateMachine.CurrentStateIndex` in the states buffer. It also handles transitions
