@@ -28,7 +28,7 @@ public partial struct StateB : IMyState
         _durationCounter -= inData.DeltaTime;
         if (_durationCounter <= 0f)
         {
-            refData.StateMachine.CurrentStateIndex = refData.StateMachine.StateCIndex;
+            refData.StateMachine.TransitionToStateIndex = (int)MyState.TypeId.StateC;
         }
     }
 }

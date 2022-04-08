@@ -2,18 +2,22 @@ using System;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
+using UnityEngine;
 
 [Serializable]
 public struct MyStateMachine : IComponentData
 {
-    public int CurrentStateIndex;
+    [HideInInspector]
+    public MyState CurrentState;
 
-    public int StateAIndex;
-    public int StateBIndex;
-    public int StateCIndex;
-
+    [HideInInspector]
     public float Speed;
+    [HideInInspector]
     public float3 StartTranslation;
+    [HideInInspector]
+    public bool IsInitialized;
+    [HideInInspector]
+    public int TransitionToStateIndex;
 }
 
 public struct StateUpdateData_ReadWrite

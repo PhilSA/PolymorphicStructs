@@ -35,35 +35,32 @@ public partial class MyStateMachineSystem : SystemBase
             };
 
             // Handle entering the first state
-            if(refData.StateMachine.CurrentStateIndex < 0)
+            if(!refData.StateMachine.IsInitialized)
             {
-                refData.StateMachine.CurrentStateIndex = 0;
+                refData.StateMachine.IsInitialized = true;
+                refData.StateMachine.TransitionToStateIndex = -1;
                 refData.StateMachine.StartTranslation = translation.Value;
 
-                int enterStateIndex = refData.StateMachine.CurrentStateIndex;
-                MyState enterStateElement = statesBuffer[enterStateIndex];
-                enterStateElement.OnStateEnter(ref refData, in inData);
-                statesBuffer[enterStateIndex] = enterStateElement;
+                refData.StateMachine.CurrentState = statesBuffer[(int)MyState.TypeId.StateA];
+                refData.StateMachine.CurrentState.OnStateEnter(ref refData, in inData);
             }
 
             // State update
-            int updateStateIndex = refData.StateMachine.CurrentStateIndex;
-            MyState updateStateElement = statesBuffer[updateStateIndex];
-            updateStateElement.OnStateUpdate(ref refData, in inData);
-            statesBuffer[updateStateIndex] = updateStateElement;
+            int stateIndexBeforeUpdate = (int)refData.StateMachine.CurrentState.CurrentTypeId;
+            refData.StateMachine.CurrentState.OnStateUpdate(ref refData, in inData);
 
             // Handle Transitions
-            if(refData.StateMachine.CurrentStateIndex != updateStateIndex)
+            if(refData.StateMachine.TransitionToStateIndex >= 0 && refData.StateMachine.TransitionToStateIndex != stateIndexBeforeUpdate)
             {
-                int exitStateIndex = updateStateIndex;
-                MyState exitStateElement = statesBuffer[exitStateIndex];
-                exitStateElement.OnStateExit(ref refData, in inData);
-                statesBuffer[exitStateIndex] = exitStateElement;
+                // Exit current state
+                refData.StateMachine.CurrentState.OnStateExit(ref refData, in inData);
 
-                int enterStateIndex = refData.StateMachine.CurrentStateIndex;
-                MyState enterStateElement = statesBuffer[enterStateIndex];
-                enterStateElement.OnStateEnter(ref refData, in inData); 
-                statesBuffer[enterStateIndex] = enterStateElement;
+                // Write current state data back into states buffer
+                statesBuffer[(int)refData.StateMachine.CurrentState.CurrentTypeId] = refData.StateMachine.CurrentState;
+
+                // Enter next state
+                refData.StateMachine.CurrentState = statesBuffer[refData.StateMachine.TransitionToStateIndex];
+                refData.StateMachine.CurrentState.OnStateEnter(ref refData, in inData);
             }
 
             // Write back data
