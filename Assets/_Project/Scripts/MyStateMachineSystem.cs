@@ -13,7 +13,7 @@ public partial class MyStateMachineSystem : SystemBase
 
         Entities.ForEach((
             ref MyStateMachine stateMachine, 
-            ref DynamicBuffer<StateElement> statesBuffer,
+            ref DynamicBuffer<MyState> statesBuffer,
             ref Translation translation, 
             ref Rotation rotation,
             ref NonUniformScale scale) =>
@@ -41,28 +41,28 @@ public partial class MyStateMachineSystem : SystemBase
                 refData.StateMachine.StartTranslation = translation.Value;
 
                 int enterStateIndex = refData.StateMachine.CurrentStateIndex;
-                StateElement enterStateElement = statesBuffer[enterStateIndex];
-                enterStateElement.Value.OnStateEnter(ref refData, in inData);
+                MyState enterStateElement = statesBuffer[enterStateIndex];
+                enterStateElement.OnStateEnter(ref refData, in inData);
                 statesBuffer[enterStateIndex] = enterStateElement;
             }
 
             // State update
             int updateStateIndex = refData.StateMachine.CurrentStateIndex;
-            StateElement updateStateElement = statesBuffer[updateStateIndex];
-            updateStateElement.Value.OnStateUpdate(ref refData, in inData);
+            MyState updateStateElement = statesBuffer[updateStateIndex];
+            updateStateElement.OnStateUpdate(ref refData, in inData);
             statesBuffer[updateStateIndex] = updateStateElement;
 
             // Handle Transitions
             if(refData.StateMachine.CurrentStateIndex != updateStateIndex)
             {
                 int exitStateIndex = updateStateIndex;
-                StateElement exitStateElement = statesBuffer[exitStateIndex];
-                exitStateElement.Value.OnStateExit(ref refData, in inData);
+                MyState exitStateElement = statesBuffer[exitStateIndex];
+                exitStateElement.OnStateExit(ref refData, in inData);
                 statesBuffer[exitStateIndex] = exitStateElement;
 
                 int enterStateIndex = refData.StateMachine.CurrentStateIndex;
-                StateElement enterStateElement = statesBuffer[enterStateIndex];
-                enterStateElement.Value.OnStateEnter(ref refData, in inData); 
+                MyState enterStateElement = statesBuffer[enterStateIndex];
+                enterStateElement.OnStateEnter(ref refData, in inData); 
                 statesBuffer[enterStateIndex] = enterStateElement;
             }
 

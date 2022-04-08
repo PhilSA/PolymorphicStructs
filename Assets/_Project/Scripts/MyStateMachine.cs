@@ -3,14 +3,6 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 
-[PolymorphicStruct]
-public interface IMyState
-{
-    public void OnStateEnter(ref StateUpdateData_ReadWrite refData, in StateUpdateData_ReadOnly inData);
-    public void OnStateExit(ref StateUpdateData_ReadWrite refData, in StateUpdateData_ReadOnly inData);
-    public void OnStateUpdate(ref StateUpdateData_ReadWrite refData, in StateUpdateData_ReadOnly inData); 
-}
-
 [Serializable]
 public struct MyStateMachine : IComponentData
 {
@@ -22,12 +14,6 @@ public struct MyStateMachine : IComponentData
 
     public float Speed;
     public float3 StartTranslation;
-}
-
-[Serializable]
-public struct StateElement : IBufferElementData
-{
-    public MyState Value;
 }
 
 public struct StateUpdateData_ReadWrite

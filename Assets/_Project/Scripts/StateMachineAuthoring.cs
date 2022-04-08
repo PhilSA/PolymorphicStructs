@@ -12,17 +12,17 @@ public class StateMachineAuthoring : MonoBehaviour, IConvertGameObjectToEntity
     public void Convert(Entity entity, EntityManager dstManager, GameObjectConversionSystem conversionSystem)
     {
         MyStateMachine stateMachine = new MyStateMachine();
-        DynamicBuffer<StateElement> statesBuffer = dstManager.AddBuffer<StateElement>(entity);
+        DynamicBuffer<MyState> statesBuffer = dstManager.AddBuffer<MyState>(entity);
 
         stateMachine.CurrentStateIndex = -1;
 
         // Add states in their polymorphic form to the buffer, and remember the index of each
         stateMachine.StateAIndex = statesBuffer.Length;
-        statesBuffer.Add(new StateElement { Value = StateA.ToMyState() });
+        statesBuffer.Add(StateA.ToMyState());
         stateMachine.StateBIndex = statesBuffer.Length;
-        statesBuffer.Add(new StateElement { Value = StateB.ToMyState() });
+        statesBuffer.Add(StateB.ToMyState());
         stateMachine.StateCIndex = statesBuffer.Length;
-        statesBuffer.Add(new StateElement { Value = StateC.ToMyState() });
+        statesBuffer.Add(StateC.ToMyState());
 
         dstManager.AddComponentData(entity, stateMachine);
     }
