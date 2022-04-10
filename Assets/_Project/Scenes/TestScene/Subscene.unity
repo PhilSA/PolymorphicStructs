@@ -167,7 +167,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   CubePrefab: {fileID: 2097995982295730103, guid: 687ea98533da75a42814fddb4400cb1d, type: 3}
-  SpawnCount: 300000
+  SpawnCount: 100000
   Spacing: 3
 --- !u!1 &421064583
 GameObject:
