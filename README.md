@@ -1,5 +1,8 @@
 # PolymorphicStructs
 
+See the forum thread for more information
+https://forum.unity.com/threads/sources-included-polymorphism-in-dots-now-with-source-generators.1264616/
+
 ## Installing into your project
 1. Import the `PolymorphicStructs.unitypackage` into your project (find it in the [Releases](https://github.com/PhilSA/PolymorphicStructs/releases) section)
 2. Make sure all of the code that's going to use PolymorphicStructs is under an .asmdef and references the PolymorphicStructs.asmdef
