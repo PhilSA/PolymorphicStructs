@@ -12,6 +12,7 @@ public interface IMyState
 }
 
 // Using partial structs, we can declare that the generated "MyState" struct will also be a "IBufferElementData"
+[InternalBufferCapacity(0)]
 public partial struct MyState : IBufferElementData
 {
 

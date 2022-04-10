@@ -4,7 +4,7 @@ using Unity.Entities;
 using Unity.Mathematics;
 
 [Serializable]
-public partial struct StateC : IMyState
+public partial struct StateC : IMyState, IComponentData // IComponentData is only there for the "Structural changes" version
 {
     public float Duration;
     public float ScaleSpeed;
