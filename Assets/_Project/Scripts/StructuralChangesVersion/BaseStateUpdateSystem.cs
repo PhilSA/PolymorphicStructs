@@ -23,8 +23,8 @@ public partial class BaseStateUpdateSystem<T> : SystemBase where T : struct, ICo
         if (!HasSingleton<StateMachineSettings>())
             return;
 
-        float deltaTime = Time.DeltaTime;
         StateMachineSettings smSettings = GetSingleton<StateMachineSettings>();
+        float deltaTime = smSettings.UseFixedDeltaTime ? smSettings.FixedDeltaTime : Time.DeltaTime;
 
         if (!smSettings.UseStructuralChanges)
             return;

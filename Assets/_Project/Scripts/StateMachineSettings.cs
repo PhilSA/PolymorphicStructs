@@ -9,4 +9,7 @@ public struct StateMachineSettings : IComponentData
 {
     public bool UseStructuralChanges;
     public bool ScheduleParallel;
+
+    public bool UseFixedDeltaTime;
+    public float FixedDeltaTime;
 }

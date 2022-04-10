@@ -200,6 +200,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   UseStructuralChanges: 0
   ScheduleParallel: 1
+  UseFixedDeltaTime: 0
+  FixedDeltaTime: 0.02
 --- !u!4 &421064585
 Transform:
   m_ObjectHideFlags: 0

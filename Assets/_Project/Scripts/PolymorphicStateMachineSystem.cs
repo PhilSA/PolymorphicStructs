@@ -12,8 +12,8 @@ public partial class PolymorphicStateMachineSystem : SystemBase
         if (!HasSingleton<StateMachineSettings>())
             return;
 
-        float deltaTime = Time.DeltaTime;
         StateMachineSettings smSettings = GetSingleton<StateMachineSettings>();
+        float deltaTime = smSettings.UseFixedDeltaTime ? smSettings.FixedDeltaTime : Time.DeltaTime;
 
         if (smSettings.UseStructuralChanges)
             return;
