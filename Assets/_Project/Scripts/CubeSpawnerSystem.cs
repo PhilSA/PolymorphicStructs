@@ -10,6 +10,11 @@ public partial class CubeSpawnerSystem : SystemBase
 {
     protected override void OnUpdate()
     {
+        if (!HasSingleton<StateMachineSettings>())
+            return;
+
+        StateMachineSettings smSettings = GetSingleton<StateMachineSettings>();
+
         EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.Temp);
 
         Entities.ForEach((Entity entity, ref CubeSpawner spawner) => 
@@ -26,7 +31,7 @@ public partial class CubeSpawnerSystem : SystemBase
                     Entity spawnedPrefab = ecb.Instantiate(spawner.CubePrefab);
                     ecb.SetComponent(spawnedPrefab, new Translation { Value = new float3(x * spawner.Spacing, 0f, y * spawner.Spacing) });
 
-                    stateMachine.Speed = random.NextFloat(0.3f, 1.5f);
+                    stateMachine.Speed = random.NextFloat(smSettings.RandomStateMachineSpeed.x, smSettings.RandomStateMachineSpeed.y);
                     ecb.SetComponent(spawnedPrefab, stateMachine);
 
                     spawnCounter++;

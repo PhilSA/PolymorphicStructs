@@ -12,4 +12,6 @@ public struct StateMachineSettings : IComponentData
 
     public bool UseFixedDeltaTime;
     public float FixedDeltaTime;
+
+    public float2 RandomStateMachineSpeed;
 }

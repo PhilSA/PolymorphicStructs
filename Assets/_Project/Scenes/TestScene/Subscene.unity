@@ -202,6 +202,9 @@ MonoBehaviour:
   ScheduleParallel: 1
   UseFixedDeltaTime: 0
   FixedDeltaTime: 0.02
+  RandomStateMachineSpeed:
+    x: 0.1
+    y: 1
 --- !u!4 &421064585
 Transform:
   m_ObjectHideFlags: 0
