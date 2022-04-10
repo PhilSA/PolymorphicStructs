@@ -125,7 +125,7 @@
     },
     "com.unity.platforms": {
       "version": "0.50.0-preview.4",
-      "depth": 1,
+      "depth": 0,
       "source": "registry",
       "dependencies": {
         "com.unity.properties": "1.7.0-preview",
