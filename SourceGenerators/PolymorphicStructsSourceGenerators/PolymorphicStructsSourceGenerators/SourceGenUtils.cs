@@ -63,6 +63,14 @@ namespace PolymorphicStructsSourceGenerators
             return methods;
         }
 
+        public static IEnumerable<PropertyDeclarationSyntax> GetAllPropertiesOfInterface(InterfaceDeclarationSyntax interfaceDeclaration)
+        {
+            IEnumerable<PropertyDeclarationSyntax> properties = interfaceDeclaration.Members
+                .Where(m => m.IsKind(SyntaxKind.PropertyDeclaration)).OfType<PropertyDeclarationSyntax>();
+
+            return properties;
+        }
+
         public static IEnumerable<FieldDeclarationSyntax> GetAllFieldsOfStruct(StructDeclarationSyntax structDeclaration)
         {
             IEnumerable<FieldDeclarationSyntax> fields = structDeclaration.Members

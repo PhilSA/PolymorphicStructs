@@ -72,8 +72,9 @@ namespace PolymorphicStructsSourceGenerators
                         }
                     }
 
-                    // Build list of interface methods
+                    // Build list of interface methods and properties
                     IEnumerable<MethodDeclarationSyntax> methods = SourceGenUtils.GetAllMethodsOfInterface(polymorphicInterface);
+                    IEnumerable<PropertyDeclarationSyntax> properties = SourceGenUtils.GetAllPropertiesOfInterface(polymorphicInterface);
 
                     // Build list of all structs implementing this interface, as well as the fields for each of them
                     List<IndividialStructData> structDatas = BuildIndividualStructsData(context, systemReceiver, allUsings, polymorphicInterface);
@@ -137,8 +138,19 @@ namespace PolymorphicStructsSourceGenerators
 
                             mergedStructWriter.WriteLine("");
 
-                            // Generate polymorphic methods
+                            // Generate polymorphic methods/properties
                             {
+                                foreach (PropertyDeclarationSyntax property in properties)
+                                {
+                                    string accessorString = "{";
+                                    foreach (AccessorDeclarationSyntax accessor in property.AccessorList.Accessors)
+                                    {
+                                        accessorString += " " + accessor.Keyword.Text + ";";
+                                    }
+                                    accessorString += " }";
+                                    mergedStructWriter.WriteLine("public " + property.Type.ToString() + " " + property.Identifier.ToString() + " " + accessorString);
+                                }
+
                                 foreach (MethodDeclarationSyntax method in methods)
                                 {
                                     // Generate parameters
@@ -165,6 +177,7 @@ namespace PolymorphicStructsSourceGenerators
                                     }
 
                                     // Method
+                                    bool hasReturnType = !string.Equals(method.ReturnType.ToString(), "void");
                                     mergedStructWriter.WriteLine("public " + method.ReturnType.ToString() + " " + method.Identifier.ToString() + "(" + parametersString + ")");
                                     mergedStructWriter.BeginScope();
                                     {
@@ -180,9 +193,17 @@ namespace PolymorphicStructsSourceGenerators
                                                     string structVarName = "instance_" + structData.StructName;
 
                                                     mergedStructWriter.WriteLine(structData.StructName + " " + structVarName + " = new " + structData.StructName + "(this);");
-                                                    mergedStructWriter.WriteLine(structVarName + "." + method.Identifier.ToString() + "(" + parametersStringWithoutType + ");");
+                                                    mergedStructWriter.WriteLine((hasReturnType ? "var r = " : "") + structVarName + "." + method.Identifier.ToString() + "(" + parametersStringWithoutType + ");");
                                                     mergedStructWriter.WriteLine(structVarName + ".To" + mergedStructName + "(ref this);");
-                                                    mergedStructWriter.WriteLine("break;");
+
+                                                    if (hasReturnType)
+                                                    {
+                                                        mergedStructWriter.WriteLine("return r;");
+                                                    }
+                                                    else
+                                                    {
+                                                        mergedStructWriter.WriteLine("break;");
+                                                    }
                                                 }
                                                 mergedStructWriter.EndScope();
                                             }
