@@ -235,7 +235,7 @@ namespace PolymorphicStructsSourceGenerators
                     // For each individual struct, generate From/To converter methods
                     foreach (IndividialStructData structData in structDatas)
                     {
-                        GeneratePartialIndividualStruct(context, allUsings, mergedStructName, structData, mergedFields);
+                        GeneratePartialIndividualStruct(context, allUsings, mergedStructName, structData, mergedFields, properties);
                     }
                 }
             }
@@ -354,7 +354,8 @@ namespace PolymorphicStructsSourceGenerators
             List<string> allUsings,
             string mergedStructName,
             IndividialStructData structData,
-            List<MergedFieldData> mergedFields)
+            List<MergedFieldData> mergedFields,
+            IEnumerable<PropertyDeclarationSyntax> properties)
         {
             FileWriter individualStructWriter = new FileWriter();
 
@@ -385,6 +386,10 @@ namespace PolymorphicStructsSourceGenerators
                         individualStructWriter.WriteLine("public " + structData.StructName + "(" + mergedStructName + " s)");
                         individualStructWriter.BeginScope();
                         {
+                            foreach (PropertyDeclarationSyntax property in properties)
+                            {
+                                individualStructWriter.WriteLine(property.Identifier.ToString() + " = s." + property.Identifier.ToString() + ";");
+                            }
                             foreach (StructFieldData field in structData.Fields)
                             {
                                 individualStructWriter.WriteLine(field.FieldName + " = s." + field.MergedFieldName + ";");
@@ -404,6 +409,10 @@ namespace PolymorphicStructsSourceGenerators
                             individualStructWriter.BeginScope();
                             {
                                 individualStructWriter.WriteLine(typeEnumVarName + " = " + mergedStructName + "." + typeEnumName + "." + structData.StructName + ",");
+                                foreach (PropertyDeclarationSyntax property in properties)
+                                {
+                                    individualStructWriter.WriteLine(property.Identifier.ToString() + " = " + property.Identifier.ToString() + ",");
+                                }
                                 foreach (MergedFieldData mergedField in mergedFields)
                                 {
                                     if (mergedField.FieldNameForStructName.ContainsKey(structData.StructName))
@@ -425,6 +434,10 @@ namespace PolymorphicStructsSourceGenerators
                         individualStructWriter.BeginScope();
                         {
                             individualStructWriter.WriteLine("s." + typeEnumVarName + " = " + mergedStructName + "." + typeEnumName + "." + structData.StructName + ";");
+                            foreach (PropertyDeclarationSyntax property in properties)
+                            {
+                                individualStructWriter.WriteLine("s." + property.Identifier.ToString() + " = " + property.Identifier.ToString() + ";");
+                            }
                             foreach (MergedFieldData mergedField in mergedFields)
                             {
                                 if (mergedField.FieldNameForStructName.ContainsKey(structData.StructName))
