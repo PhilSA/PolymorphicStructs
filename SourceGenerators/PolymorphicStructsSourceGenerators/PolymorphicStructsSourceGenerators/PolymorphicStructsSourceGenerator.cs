@@ -209,6 +209,11 @@ namespace PolymorphicStructsSourceGenerators
                                             }
                                         }
                                         mergedStructWriter.EndScope();
+
+                                        if (hasReturnType)
+                                        {
+                                            mergedStructWriter.WriteLine("return default;");
+                                        }
                                     }
                                     mergedStructWriter.EndScope();
                                 }
