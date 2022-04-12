@@ -73,8 +73,8 @@ namespace PolymorphicStructsSourceGenerators
                     }
 
                     // Build list of interface methods and properties
-                    IEnumerable<MethodDeclarationSyntax> methods = SourceGenUtils.GetAllMethodsOfInterface(polymorphicInterface);
-                    IEnumerable<PropertyDeclarationSyntax> properties = SourceGenUtils.GetAllPropertiesOfInterface(polymorphicInterface);
+                    IEnumerable<MethodDeclarationSyntax> methods = SourceGenUtils.GetAllMethodsOf(polymorphicInterface);
+                    IEnumerable<PropertyDeclarationSyntax> properties = SourceGenUtils.GetAllPropertiesOf(polymorphicInterface);
 
                     // Build list of all structs implementing this interface, as well as the fields for each of them
                     List<IndividialStructData> structDatas = BuildIndividualStructsData(context, systemReceiver, allUsings, polymorphicInterface);
@@ -324,7 +324,7 @@ namespace PolymorphicStructsSourceGenerators
                     }
 
                     // Add fields
-                    IEnumerable<FieldDeclarationSyntax> fields = SourceGenUtils.GetAllFieldsOfStruct(individualStruct);
+                    IEnumerable<FieldDeclarationSyntax> fields = SourceGenUtils.GetAllFieldsOf(individualStruct);
                     foreach (FieldDeclarationSyntax field in fields)
                     {
                         structData.Fields.Add(new StructFieldData

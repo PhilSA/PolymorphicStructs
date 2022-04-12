@@ -55,25 +55,25 @@ namespace PolymorphicStructsSourceGenerators
             return false;
         }
 
-        public static IEnumerable<MethodDeclarationSyntax> GetAllMethodsOfInterface(InterfaceDeclarationSyntax interfaceDeclaration)
+        public static IEnumerable<MethodDeclarationSyntax> GetAllMethodsOf(TypeDeclarationSyntax t)
         {
-            IEnumerable<MethodDeclarationSyntax> methods = interfaceDeclaration.Members
+            IEnumerable<MethodDeclarationSyntax> methods = t.Members
                 .Where(m => m.IsKind(SyntaxKind.MethodDeclaration)).OfType<MethodDeclarationSyntax>();
 
             return methods;
         }
 
-        public static IEnumerable<PropertyDeclarationSyntax> GetAllPropertiesOfInterface(InterfaceDeclarationSyntax interfaceDeclaration)
+        public static IEnumerable<PropertyDeclarationSyntax> GetAllPropertiesOf(TypeDeclarationSyntax t)
         {
-            IEnumerable<PropertyDeclarationSyntax> properties = interfaceDeclaration.Members
+            IEnumerable<PropertyDeclarationSyntax> properties = t.Members
                 .Where(m => m.IsKind(SyntaxKind.PropertyDeclaration)).OfType<PropertyDeclarationSyntax>();
 
             return properties;
         }
 
-        public static IEnumerable<FieldDeclarationSyntax> GetAllFieldsOfStruct(StructDeclarationSyntax structDeclaration)
+        public static IEnumerable<FieldDeclarationSyntax> GetAllFieldsOf(TypeDeclarationSyntax t)
         {
-            IEnumerable<FieldDeclarationSyntax> fields = structDeclaration.Members
+            IEnumerable<FieldDeclarationSyntax> fields = t.Members
                 .Where(m => m.IsKind(SyntaxKind.FieldDeclaration)).OfType<FieldDeclarationSyntax>();
 
             return fields;
