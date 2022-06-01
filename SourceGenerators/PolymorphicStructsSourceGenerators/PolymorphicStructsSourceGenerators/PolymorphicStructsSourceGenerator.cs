@@ -316,7 +316,7 @@ namespace PolymorphicStructsSourceGenerators
                     IndividialStructData structData = new IndividialStructData();
                     structData.Namespace = SourceGenUtils.GetNamespace(individualStruct);
                     structData.StructName = individualStruct.Identifier.ToString();
-
+                     
                     // Add usings
                     foreach (var u in individualStruct.SyntaxTree.GetCompilationUnitRoot(context.CancellationToken).Usings)
                     {
