@@ -37,3 +37,5 @@ sysinfo.txt
 
 # Whitelist
 !/SourceGenerators/*
+SourceGenerators/PolymorphicStructsSourceGenerators/PolymorphicStructsSourceGenerators/bin
+SourceGenerators/PolymorphicStructsSourceGenerators/PolymorphicStructsSourceGeneratorsTests/bin
