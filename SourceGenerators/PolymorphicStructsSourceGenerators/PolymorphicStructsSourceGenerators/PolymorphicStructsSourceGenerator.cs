@@ -38,10 +38,16 @@ namespace PolymorphicStructsSourceGenerators
             public Dictionary<string, string> FieldNameForStructName = new Dictionary<string, string>();
         }
 
+        public void Initialize(GeneratorInitializationContext context)
+        {
+            context.RegisterForSyntaxNotifications(() => new PolymorphicStructSyntaxReceiver());
+        }
+
         public void Execute(GeneratorExecutionContext context)
         {
             //Debugger.Launch();
-            System.Console.WriteLine("PolymorphicStructs sourceGenerator execute  on assembly " + context.Compilation.AssemblyName);
+            System.Console.WriteLine(
+                $"PolymorphicStructs sourceGenerator execute  on assembly {context.Compilation.AssemblyName}");
 
             try
             {
@@ -50,204 +56,245 @@ namespace PolymorphicStructsSourceGenerators
                 // Find all polymorphic struct interfaces, based on attribute
                 IEnumerable<InterfaceDeclarationSyntax> polymorphicInterfaces = systemReceiver.PolymorphicInterfaces;
 
-                // For each polymorphic struct interface, generate a polymorphic struct
-                foreach (InterfaceDeclarationSyntax polymorphicInterface in polymorphicInterfaces)
+                foreach (var polymorphicInterface in polymorphicInterfaces)
                 {
-                    string mergedStructName = polymorphicInterface.Identifier.Text.Substring(1); // TODO; must find better
-
-                    // Get interface namespace
-                    string interfaceNamespace = SourceGenUtils.GetNamespace(polymorphicInterface);
-
-                    // Build a list of all usings
-                    List<string> allUsings = new List<string>();
-                    {
-                        TryAddUniqueUsing(allUsings, "System");
-                        if (!string.IsNullOrEmpty(interfaceNamespace))
-                        {
-                            TryAddUniqueUsing(allUsings, interfaceNamespace);
-                        }
-                        foreach (var u in polymorphicInterface.SyntaxTree.GetCompilationUnitRoot(context.CancellationToken).Usings)
-                        {
-                            TryAddUniqueUsing(allUsings, u.Name.ToString());
-                        }
-                    }
-
-                    // Build list of interface methods and properties
-                    IEnumerable<MethodDeclarationSyntax> methods = SourceGenUtils.GetAllMethodsOf(polymorphicInterface);
-                    IEnumerable<PropertyDeclarationSyntax> properties = SourceGenUtils.GetAllPropertiesOf(polymorphicInterface);
-
-                    // Build list of all structs implementing this interface, as well as the fields for each of them
-                    List<IndividialStructData> structDatas = BuildIndividualStructsData(context, systemReceiver, allUsings, polymorphicInterface);
-
-                    if (structDatas.Count == 0)
-                        continue;
-
-                    // Build list of merged fields across all structs
-                    List<MergedFieldData> mergedFields = BuildMergedFields(structDatas);
-
-                    FileWriter mergedStructWriter = new FileWriter();
-
-                    // Generate usings
-                    {
-                        foreach (string u in allUsings)
-                        {
-                            mergedStructWriter.WriteLine("using " + u + ";");
-                        }
-                    }
-
-                    mergedStructWriter.WriteLine("");
-
-                    // Open namespace
-                    if (!string.IsNullOrEmpty(interfaceNamespace))
-                    {
-                        mergedStructWriter.WriteLine("namespace " + interfaceNamespace);
-                        mergedStructWriter.BeginScope();
-                    }
-
-                    {
-                        // Generate struct declaration
-                        mergedStructWriter.WriteLine("[Serializable]");
-                        mergedStructWriter.WriteLine("public partial struct " + mergedStructName); // TODO: how to define custom interfaces it can implement
-                        mergedStructWriter.BeginScope();
-                        {
-                            // Generate types enum
-                            {
-                                mergedStructWriter.WriteLine("public enum " + typeEnumName);
-                                mergedStructWriter.BeginScope();
-                                {
-                                    foreach (IndividialStructData structData in structDatas)
-                                    {
-                                        mergedStructWriter.WriteLine(structData.StructName + ",");
-                                    }
-                                }
-                                mergedStructWriter.EndScope();
-                            }
-
-                            mergedStructWriter.WriteLine("");
-
-                            // Generate fields
-                            {
-                                mergedStructWriter.WriteLine("public " + typeEnumName + " " + typeEnumVarName + ";");
-
-                                for (int i = 0; i < mergedFields.Count; i++)
-                                {
-                                    MergedFieldData mergedField = mergedFields[i];
-                                    mergedStructWriter.WriteLine("public " + mergedField.TypeName + " " + mergedField.FieldName + ";");
-                                }
-                            }
-
-                            mergedStructWriter.WriteLine("");
-
-                            // Generate polymorphic methods/properties
-                            {
-                                foreach (PropertyDeclarationSyntax property in properties)
-                                {
-                                    string accessorString = "{";
-                                    foreach (AccessorDeclarationSyntax accessor in property.AccessorList.Accessors)
-                                    {
-                                        accessorString += " " + accessor.Keyword.Text + ";";
-                                    }
-                                    accessorString += " }";
-                                    mergedStructWriter.WriteLine("public " + property.Type.ToString() + " " + property.Identifier.ToString() + " " + accessorString);
-                                }
-
-                                foreach (MethodDeclarationSyntax method in methods)
-                                {
-                                    // Generate parameters
-                                    string parametersString = "";
-                                    string parametersStringWithoutType = "";
-                                    for (int i = 0; i < method.ParameterList.Parameters.Count; i++)
-                                    {
-                                        ParameterSyntax param = method.ParameterList.Parameters[i];
-
-                                        if (param.Modifiers != null && param.Modifiers.Count > 0)
-                                        {
-                                            parametersString += param.Modifiers.ToString() + " ";
-                                            parametersStringWithoutType += param.Modifiers.ToString() + " ";
-                                        }
-
-                                        parametersString += param.Type.ToString() + " " + param.Identifier.Text;
-                                        parametersStringWithoutType += param.Identifier.Text;
-
-                                        if (i < method.ParameterList.Parameters.Count - 1)
-                                        {
-                                            parametersString += ", ";
-                                            parametersStringWithoutType += ", ";
-                                        }
-                                    }
-
-                                    // Method
-                                    bool hasReturnType = !string.Equals(method.ReturnType.ToString(), "void");
-                                    mergedStructWriter.WriteLine("public " + method.ReturnType.ToString() + " " + method.Identifier.ToString() + "(" + parametersString + ")");
-                                    mergedStructWriter.BeginScope();
-                                    {
-                                        // For each individual struct, call the method
-                                        mergedStructWriter.WriteLine("switch(" + typeEnumVarName + ")");
-                                        mergedStructWriter.BeginScope();
-                                        {
-                                            foreach (IndividialStructData structData in structDatas)
-                                            {
-                                                mergedStructWriter.WriteLine("case " + typeEnumName + "." + structData.StructName + ":");
-                                                mergedStructWriter.BeginScope();
-                                                {
-                                                    string structVarName = "instance_" + structData.StructName;
-
-                                                    mergedStructWriter.WriteLine(structData.StructName + " " + structVarName + " = new " + structData.StructName + "(this);");
-                                                    mergedStructWriter.WriteLine((hasReturnType ? "var r = " : "") + structVarName + "." + method.Identifier.ToString() + "(" + parametersStringWithoutType + ");");
-                                                    mergedStructWriter.WriteLine(structVarName + ".To" + mergedStructName + "(ref this);");
-
-                                                    if (hasReturnType)
-                                                    {
-                                                        mergedStructWriter.WriteLine("return r;");
-                                                    }
-                                                    else
-                                                    {
-                                                        mergedStructWriter.WriteLine("break;");
-                                                    }
-                                                }
-                                                mergedStructWriter.EndScope();
-                                            }
-                                        }
-                                        mergedStructWriter.EndScope();
-
-                                        if (hasReturnType)
-                                        {
-                                            mergedStructWriter.WriteLine("return default;");
-                                        }
-                                    }
-                                    mergedStructWriter.EndScope();
-                                }
-                            }
-                        }
-                        mergedStructWriter.EndScope();
-                    }
-
-                    // Close namespace
-                    if (!string.IsNullOrEmpty(interfaceNamespace))
-                    {
-                        mergedStructWriter.EndScope();
-                    }
-
-                    System.Console.WriteLine("Generating PolyInterface " + mergedStructName);
-
-                    context.AddSource(mergedStructName, SourceText.From(mergedStructWriter.FileContents, Encoding.UTF8));
-
-                    // For each individual struct, generate From/To converter methods
-                    foreach (IndividialStructData structData in structDatas)
-                    {
-                        GeneratePartialIndividualStruct(context, allUsings, mergedStructName, structData, mergedFields, properties);
-                    }
+                    GenerateInterfacesCode(context, systemReceiver, polymorphicInterface);
                 }
             }
             catch (Exception ex)
             {
-                System.Console.WriteLine("SourceGenerators ERROR: " + ex.Message);
+                System.Console.WriteLine($"SourceGenerators ERROR: {ex.Message}");
+                var diagnosticDescriptor = new DiagnosticDescriptor("PolymorphicStructsError", "PolymorphicStructsError", $"Generation failed with {ex.Message}", "PolymorphicStructsError", DiagnosticSeverity.Error, true);
+                context.ReportDiagnostic(Diagnostic.Create(diagnosticDescriptor, Location.None, DiagnosticSeverity.Error));
+            }
+        }
+        
+
+        public class StructDef
+        {
+            public string MergedStructName;
+            public string InterfaceName;
+            public string Namespace;
+            public List<string> UsingDirectives;
+        }
+
+        private void GenerateInterfacesCode(GeneratorExecutionContext context,
+            PolymorphicStructSyntaxReceiver systemReceiver,
+            InterfaceDeclarationSyntax polymorphicInterface)
+        {
+            // For each polymorphic struct interface, generate a polymorphic struct
+            var mergetStructDef = CollectStructHeaderDef(context, polymorphicInterface);
+            var allMemberSymbols = SourceGenUtils.GetAllMemberSymbols(context, polymorphicInterface);
+            // Build list of all structs implementing this interface, as well as the fields for each of them
+            List<IndividialStructData> structDatas =
+                BuildIndividualStructsData(context, systemReceiver, mergetStructDef, polymorphicInterface);
+
+            if (structDatas.Count == 0)
+                return; // maybe we still should generate a struct in this case
+
+            // Build list of merged fields across all structs
+            List<MergedFieldData> mergedFields = BuildMergedFields(structDatas);
+
+            var mergedStructSourceText = GenerateMergedStruct(mergetStructDef, allMemberSymbols, mergedFields, structDatas);
+            System.Console.WriteLine($"Generating PolyInterface {mergetStructDef.MergedStructName}");
+
+            context.AddSource(mergetStructDef.MergedStructName, mergedStructSourceText);
+
+            // For each individual struct, generate From/To converter methods
+            foreach (IndividialStructData structData in structDatas)
+            {
+                GeneratePartialIndividualStruct(context, mergetStructDef.UsingDirectives, mergetStructDef.MergedStructName, structData, mergedFields);
             }
         }
 
-        public void Initialize(GeneratorInitializationContext context)
+        private SourceText GenerateMergedStruct(StructDef structDef, List<ISymbol> allMemberSymbols,
+            List<MergedFieldData> mergedFieldDatas, List<IndividialStructData> individialStructDatas)
         {
-            context.RegisterForSyntaxNotifications(() => new PolymorphicStructSyntaxReceiver());
+            FileWriter structWriter = new FileWriter();
+            // Generate usings
+            GenerateUsingDirectives(structWriter, structDef);
+
+            structWriter.WriteLine("");
+
+            // Open namespace
+            var hasNamespace = !string.IsNullOrEmpty(structDef.Namespace);
+            if (hasNamespace)
+            {
+                structWriter.WriteLine($"namespace {structDef.Namespace}");
+                structWriter.BeginScope();
+            }
+
+            GenerateStructHeader(structWriter, structDef);
+            structWriter.BeginScope();
+            GenerateTypeEnum(structWriter, individialStructDatas);
+            structWriter.WriteLine("");
+            GenerateFields(structWriter, mergedFieldDatas);
+            structWriter.WriteLine("");
+            // GenerateProperties
+            GenerateMethods(structWriter, structDef, allMemberSymbols, individialStructDatas);
+            structWriter.WriteLine("");
+            structWriter.EndScope();
+            if (hasNamespace)
+            {
+                structWriter.EndScope();
+            }
+
+            return SourceText.From(structWriter.FileContents, Encoding.UTF8);
+        }
+
+        private void GenerateMethods(FileWriter structWriter, StructDef structDef, List<ISymbol> allMemberSymbols,
+            List<IndividialStructData> individialStructDatas)
+        {
+            foreach (var memberSymbol in allMemberSymbols)
+            {
+                if (memberSymbol is IMethodSymbol methodSymbol)
+                {
+                    // if (!Debugger.IsAttached)
+                    //     Debugger.Launch();
+                    // Debugger.Break();
+                    var type = methodSymbol.ReturnsVoid ? "void" : methodSymbol.ReturnType.ToDisplayString();
+                    var parameters = string.Join(", ", methodSymbol.Parameters.Select(it => $"{MapRefKind(it.RefKind)}{it.Type} {it.Name}"));
+                    var parametersWithoutType = string.Join(", ", methodSymbol.Parameters.Select(it => $"{MapRefKind(it.RefKind)}{it.Name}"));
+                    structWriter.WriteLine($"public {type} {methodSymbol.Name}({parameters})");
+                    GenerateMethodBody(structWriter, structDef, methodSymbol, individialStructDatas, $"{methodSymbol.Name}({parametersWithoutType})");
+                } else if (memberSymbol is IPropertySymbol propertySymbol)
+                {
+                    structWriter.WriteLine($"public {propertySymbol.Type} {propertySymbol.Name}");
+                    structWriter.BeginScope();
+                    if (propertySymbol.GetMethod != null)
+                        GeneratePropertyGetMethod(structWriter, structDef, propertySymbol.GetMethod, individialStructDatas, propertySymbol.Name);
+                    if (propertySymbol.SetMethod != null)
+                        GeneratePropertySetMethod(structWriter, structDef, propertySymbol.SetMethod, individialStructDatas, propertySymbol.Name);
+                    structWriter.EndScope();
+                }
+            }
+        }
+
+        private void GeneratePropertyGetMethod(FileWriter structWriter, StructDef structDef, IMethodSymbol methodSymbol,
+            List<IndividialStructData> structDatas, string propertyName)
+        {
+            structWriter.WriteLine("get");
+            GenerateMethodBody(structWriter, structDef, methodSymbol, structDatas, $"{propertyName}");
+        }
+
+        private void GeneratePropertySetMethod(FileWriter structWriter, StructDef structDef, IMethodSymbol methodSymbol,
+            List<IndividialStructData> structDatas, string propertyName)
+        {
+            structWriter.WriteLine("set");
+            GenerateMethodBody(structWriter, structDef, methodSymbol, structDatas, $"{propertyName} = value");
+        }
+
+        private void GenerateMethodBody(FileWriter structWriter, StructDef structDef, IMethodSymbol methodSymbol,
+            List<IndividialStructData> structDatas, string callClause)
+        {
+            structWriter.BeginScope();
+            structWriter.WriteLine($"switch({typeEnumVarName})");
+            structWriter.BeginScope();
+            var returnsVoid = methodSymbol.ReturnsVoid;
+            foreach (IndividialStructData structData in structDatas)
+            {
+                structWriter.WriteLine($"case {typeEnumName}.{structData.StructName}:");
+                structWriter.BeginScope();
+                string structVarName = $"instance_{structData.StructName}";
+                structWriter.WriteLine($"{structData.StructName} {structVarName} = new {structData.StructName}(this);");
+                structWriter.WriteLine($"{(returnsVoid ? "" : "var r = ")}{structVarName}.{callClause};");
+                structWriter.WriteLine($"{structVarName}.To{structDef.MergedStructName}(ref this);");
+                structWriter.WriteLine(returnsVoid ? "break;" : "return r;");
+                structWriter.EndScope();
+            }
+
+            structWriter.WriteLine("default:");
+            structWriter.BeginScope();
+            foreach (var param in methodSymbol.Parameters)
+            {
+                if (param.RefKind == RefKind.Out)
+                    structWriter.WriteLine($"{param.Name} = default;");
+            }
+            structWriter.WriteLine($"return{(returnsVoid ? "" : " default")};");
+            structWriter.EndScope();
+            structWriter.EndScope();
+            structWriter.EndScope();
+        }
+
+        private string MapRefKind(RefKind argRefKind)
+        {
+            switch(argRefKind)
+            {
+                case RefKind.None:
+                    return "";
+                case RefKind.Ref:
+                    return "ref ";
+                case RefKind.Out:
+                    return "out ";
+                case RefKind.In:
+                    return "in ";
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(argRefKind), argRefKind, null);
+            }
+        }
+
+        private void GenerateFields(FileWriter structWriter, List<MergedFieldData> mergedFields)
+        {
+            structWriter.WriteLine($"public {typeEnumName} {typeEnumVarName};");
+
+            for (int i = 0; i < mergedFields.Count; i++)
+            {
+                MergedFieldData mergedField = mergedFields[i];
+                structWriter.WriteLine($"public {mergedField.TypeName} {mergedField.FieldName};");
+            }
+        }
+
+        private void GenerateTypeEnum(FileWriter structWriter, List<IndividialStructData> structDatas)
+        {
+            structWriter.WriteLine($"public enum {typeEnumName}");
+            structWriter.BeginScope();
+            {
+                foreach (IndividialStructData structData in structDatas)
+                {
+                    structWriter.WriteLine($"{structData.StructName},");
+                }
+            }
+            structWriter.EndScope();
+        }
+
+        private void GenerateStructHeader(FileWriter structWriter, StructDef structDef)
+        {
+            structWriter.WriteLine("[Serializable]");
+            structWriter.WriteLine($"public partial struct {structDef.MergedStructName} : {structDef.InterfaceName}"); // TODO: how to define custom interfaces it can implement
+        }
+
+        private static void GenerateUsingDirectives(FileWriter mergedStructWriter, StructDef structDef)
+        {
+            foreach (string u in structDef.UsingDirectives)
+            {
+                mergedStructWriter.WriteLine($"using {u};");
+            }
+        }
+
+        private static StructDef CollectStructHeaderDef(GeneratorExecutionContext context, InterfaceDeclarationSyntax polymorphicInterface)
+        {
+            string mergedStructName = polymorphicInterface.Identifier.Text.Substring(1); // TODO; must find better
+            // Get interface namespace
+            string interfaceNamespace = SourceGenUtils.GetNamespace(polymorphicInterface);
+            // Build a list of all usings
+            List<string> allUsings = new List<string>();
+            TryAddUniqueUsing(allUsings, "System");
+            if (!string.IsNullOrEmpty(interfaceNamespace))
+            {
+                TryAddUniqueUsing(allUsings, interfaceNamespace);
+            }
+
+            foreach (var u in polymorphicInterface.SyntaxTree.GetCompilationUnitRoot(context.CancellationToken).Usings)
+            {
+                TryAddUniqueUsing(allUsings, u.Name.ToString());
+            }
+            return new StructDef
+            {
+                InterfaceName = polymorphicInterface.Identifier.ToString(),
+                MergedStructName = mergedStructName,
+                Namespace = interfaceNamespace,
+                UsingDirectives = allUsings,
+            };
         }
 
         private static List<MergedFieldData> BuildMergedFields(List<IndividialStructData> structDatas)
@@ -284,7 +331,7 @@ namespace PolymorphicStructsSourceGenerators
 
                         MergedFieldData mergedFieldData = new MergedFieldData();
                         mergedFieldData.TypeName = fieldData.TypeName;
-                        mergedFieldData.FieldName = fieldData.TypeName + "_" + mergedFields.Count;
+                        mergedFieldData.FieldName = $"{fieldData.TypeName}_{mergedFields.Count}";
                         mergedFieldData.FieldNameForStructName.Add(structData.StructName, fieldData.FieldName);
                         mergedFields.Add(mergedFieldData);
 
@@ -305,7 +352,7 @@ namespace PolymorphicStructsSourceGenerators
             return mergedFields;
         }
 
-        private static List<IndividialStructData> BuildIndividualStructsData(GeneratorExecutionContext context, PolymorphicStructSyntaxReceiver systemReceiver, List<string> allUsings, InterfaceDeclarationSyntax polymorphicInterface)
+        private static List<IndividialStructData> BuildIndividualStructsData(GeneratorExecutionContext context, PolymorphicStructSyntaxReceiver systemReceiver, StructDef structDef, InterfaceDeclarationSyntax polymorphicInterface)
         {
             List<IndividialStructData> structDatas = new List<IndividialStructData>();
 
@@ -313,6 +360,9 @@ namespace PolymorphicStructsSourceGenerators
             {
                 if(SourceGenUtils.ImplementsInterface(individualStruct, polymorphicInterface.Identifier.Text))
                 {
+                    if (individualStruct.Identifier.Text.Equals(structDef.MergedStructName))
+                        continue; // skip partial struct, that is extending generated one
+
                     IndividialStructData structData = new IndividialStructData();
                     structData.Namespace = SourceGenUtils.GetNamespace(individualStruct);
                     structData.StructName = individualStruct.Identifier.ToString();
@@ -320,18 +370,23 @@ namespace PolymorphicStructsSourceGenerators
                     // Add usings
                     foreach (var u in individualStruct.SyntaxTree.GetCompilationUnitRoot(context.CancellationToken).Usings)
                     {
-                        TryAddUniqueUsing(allUsings, u.Name.ToString());
+                        TryAddUniqueUsing(structDef.UsingDirectives, u.Name.ToString());
                     }
 
-                    // Add fields
-                    IEnumerable<FieldDeclarationSyntax> fields = SourceGenUtils.GetAllFieldsOf(individualStruct);
-                    foreach (FieldDeclarationSyntax field in fields)
+                    var semanticModel = context.Compilation.GetSemanticModel(individualStruct.SyntaxTree);
+                    var structSymbol = semanticModel.GetDeclaredSymbol(individualStruct, context.CancellationToken);
+                    var allFields = structSymbol?.GetMembers().Where(it => it.Kind == SymbolKind.Field).Cast<IFieldSymbol>().ToList();
+
+                    if (allFields != null)
                     {
-                        structData.Fields.Add(new StructFieldData
+                        foreach (var field in allFields)
                         {
-                            TypeName = field.Declaration.Type.ToString(),
-                            FieldName = field.Declaration.Variables.ToString(),
-                        });
+                            structData.Fields.Add(new StructFieldData
+                            {
+                                TypeName = field.Type.Name,
+                                FieldName = MapFieldNameToProperty(field),
+                            });
+                        }
                     }
 
                     structDatas.Add(structData);
@@ -339,6 +394,14 @@ namespace PolymorphicStructsSourceGenerators
             }    
 
             return structDatas;
+        }
+
+        private static string MapFieldNameToProperty(IFieldSymbol fieldSymbol)
+        {
+            if (fieldSymbol.AssociatedSymbol is IPropertySymbol propertySymbol)
+                return propertySymbol.Name;
+
+            return fieldSymbol.Name;
         }
 
         private static void TryAddUniqueUsing(List<string> allUsings, string newUsing)
@@ -354,8 +417,7 @@ namespace PolymorphicStructsSourceGenerators
             List<string> allUsings,
             string mergedStructName,
             IndividialStructData structData,
-            List<MergedFieldData> mergedFields,
-            IEnumerable<PropertyDeclarationSyntax> properties)
+            List<MergedFieldData> mergedFields)
         {
             FileWriter individualStructWriter = new FileWriter();
 
@@ -363,7 +425,7 @@ namespace PolymorphicStructsSourceGenerators
             {
                 foreach (string u in allUsings)
                 {
-                    individualStructWriter.WriteLine("using " + u + ";");
+                    individualStructWriter.WriteLine($"using {u};");
                 }
             }
 
@@ -372,27 +434,23 @@ namespace PolymorphicStructsSourceGenerators
             // Open namespace
             if (!string.IsNullOrEmpty(structData.Namespace))
             {
-                individualStructWriter.WriteLine("namespace " + structData.Namespace);
+                individualStructWriter.WriteLine($"namespace {structData.Namespace}");
                 individualStructWriter.BeginScope();
             }
 
             {
                 // Generate struct declaration
-                individualStructWriter.WriteLine("public partial struct " + structData.StructName);
+                individualStructWriter.WriteLine($"public partial struct {structData.StructName}");
                 individualStructWriter.BeginScope();
                 {
                     // From merged constructor
                     {
-                        individualStructWriter.WriteLine("public " + structData.StructName + "(" + mergedStructName + " s)");
+                        individualStructWriter.WriteLine($"public {structData.StructName}({mergedStructName} s)");
                         individualStructWriter.BeginScope();
                         {
-                            foreach (PropertyDeclarationSyntax property in properties)
-                            {
-                                individualStructWriter.WriteLine(property.Identifier.ToString() + " = s." + property.Identifier.ToString() + ";");
-                            }
                             foreach (StructFieldData field in structData.Fields)
                             {
-                                individualStructWriter.WriteLine(field.FieldName + " = s." + field.MergedFieldName + ";");
+                                individualStructWriter.WriteLine($"{field.FieldName} = s.{field.MergedFieldName};");
                             }
                         }
                         individualStructWriter.EndScope();
@@ -402,22 +460,20 @@ namespace PolymorphicStructsSourceGenerators
 
                     // To merged
                     {
-                        individualStructWriter.WriteLine("public " + mergedStructName + " To" + mergedStructName + "()");
+                        individualStructWriter.WriteLine($"public {mergedStructName} To{mergedStructName}()");
                         individualStructWriter.BeginScope();
                         {
-                            individualStructWriter.WriteLine("return new " + mergedStructName);
+                            individualStructWriter.WriteLine($"return new {mergedStructName}");
                             individualStructWriter.BeginScope();
                             {
-                                individualStructWriter.WriteLine(typeEnumVarName + " = " + mergedStructName + "." + typeEnumName + "." + structData.StructName + ",");
-                                foreach (PropertyDeclarationSyntax property in properties)
-                                {
-                                    individualStructWriter.WriteLine(property.Identifier.ToString() + " = " + property.Identifier.ToString() + ",");
-                                }
+                                individualStructWriter.WriteLine(
+                                    $"{typeEnumVarName} = {mergedStructName}.{typeEnumName}.{structData.StructName},");
                                 foreach (MergedFieldData mergedField in mergedFields)
                                 {
                                     if (mergedField.FieldNameForStructName.ContainsKey(structData.StructName))
                                     {
-                                        individualStructWriter.WriteLine(mergedField.FieldName + " = " + mergedField.FieldNameForStructName[structData.StructName] + ",");
+                                        individualStructWriter.WriteLine(
+                                            $"{mergedField.FieldName} = {mergedField.FieldNameForStructName[structData.StructName]},");
                                     }
                                 }
                             }
@@ -430,19 +486,17 @@ namespace PolymorphicStructsSourceGenerators
 
                     // To merged (by ref)
                     {
-                        individualStructWriter.WriteLine("public void To" + mergedStructName + "(ref " + mergedStructName + " s)");
+                        individualStructWriter.WriteLine($"public void To{mergedStructName}(ref {mergedStructName} s)");
                         individualStructWriter.BeginScope();
                         {
-                            individualStructWriter.WriteLine("s." + typeEnumVarName + " = " + mergedStructName + "." + typeEnumName + "." + structData.StructName + ";");
-                            foreach (PropertyDeclarationSyntax property in properties)
-                            {
-                                individualStructWriter.WriteLine("s." + property.Identifier.ToString() + " = " + property.Identifier.ToString() + ";");
-                            }
+                            individualStructWriter.WriteLine(
+                                $"s.{typeEnumVarName} = {mergedStructName}.{typeEnumName}.{structData.StructName};");
                             foreach (MergedFieldData mergedField in mergedFields)
                             {
                                 if (mergedField.FieldNameForStructName.ContainsKey(structData.StructName))
                                 {
-                                    individualStructWriter.WriteLine("s." + mergedField.FieldName + " = " + mergedField.FieldNameForStructName[structData.StructName] + ";");
+                                    individualStructWriter.WriteLine(
+                                        $"s.{mergedField.FieldName} = {mergedField.FieldNameForStructName[structData.StructName]};");
                                 }
                             }
                         }
@@ -458,7 +512,7 @@ namespace PolymorphicStructsSourceGenerators
                 individualStructWriter.EndScope();
             }
 
-            System.Console.WriteLine("Generating IndividualStruct " + structData.StructName);
+            System.Console.WriteLine($"Generating IndividualStruct {structData.StructName}");
 
             context.AddSource(structData.StructName, SourceText.From(individualStructWriter.FileContents, Encoding.UTF8));
         }

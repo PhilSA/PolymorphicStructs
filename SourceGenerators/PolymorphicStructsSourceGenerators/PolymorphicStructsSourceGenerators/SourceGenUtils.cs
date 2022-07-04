@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+// ReSharper disable HeapView.BoxingAllocation
 
 namespace PolymorphicStructsSourceGenerators
 {
@@ -95,6 +96,24 @@ namespace PolymorphicStructsSourceGenerators
             }
 
             return nameSpace;
+        }
+
+        public static List<ISymbol> GetAllMemberSymbols(GeneratorExecutionContext context, InterfaceDeclarationSyntax polymorphicInterface)
+        {
+            var semanticModel = context.Compilation.GetSemanticModel(polymorphicInterface.SyntaxTree);
+            var interfaceSymbol = semanticModel.GetDeclaredSymbol(polymorphicInterface, context.CancellationToken);
+
+            return interfaceSymbol?.GetMembers().Concat(interfaceSymbol
+                    ?.AllInterfaces
+                    .SelectMany(it => it.GetMembers()))
+                .Where(IsNotAPropertyMethod)
+                .ToList();
+        }
+
+        private static bool IsNotAPropertyMethod(ISymbol it)
+        {
+            return !(it is IMethodSymbol methodSymbol) || methodSymbol.MethodKind != MethodKind.PropertyGet &&
+                methodSymbol.MethodKind != MethodKind.PropertySet;
         }
     }
 }
